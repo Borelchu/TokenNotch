@@ -215,18 +215,34 @@ enum CodexAPI {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw UsageError.codexAuthMalformed
         }
+        // Which window is the session vs. weekly limit varies by plan (a Plus
+        // account can report only a weekly primary_window), so classify by
+        // window length instead of position.
         let rateLimit = body["rate_limit"] as? [String: Any]
+        var session: UsageWindow?
+        var weekly: UsageWindow?
+        for key in ["primary_window", "secondary_window"] {
+            guard let dict = rateLimit?[key] as? [String: Any],
+                  let parsed = window(from: dict)
+            else { continue }
+            let seconds = (dict["limit_window_seconds"] as? NSNumber)?.doubleValue ?? 0
+            if seconds > 0, seconds <= 6 * 3600 {
+                session = session ?? parsed
+            } else {
+                weekly = weekly ?? parsed
+            }
+        }
         return Usage(
-            fiveHour: window(from: rateLimit?["primary_window"]),
-            sevenDay: window(from: rateLimit?["secondary_window"]),
+            fiveHour: session,
+            sevenDay: weekly,
             planType: body["plan_type"] as? String
         )
     }
 
-    private static func window(from value: Any?) -> UsageWindow? {
-        guard let dict = value as? [String: Any] else { return nil }
+    private static func window(from dict: [String: Any]) -> UsageWindow? {
         let used = (dict["used_percent"] as? NSNumber)?.doubleValue
         let resetEpoch = ((dict["reset_at"] ?? dict["resets_at"]) as? NSNumber)?.doubleValue
+        guard used != nil || resetEpoch != nil else { return nil }
         return UsageWindow(
             utilization: used,
             resetsAt: resetEpoch.map { Date(timeIntervalSince1970: $0) }

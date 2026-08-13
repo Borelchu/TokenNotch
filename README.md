@@ -6,7 +6,10 @@ Claude Code / Codex CLI의 남은 사용량과 세션 리셋 시간을 알려주
 - **노치 왼쪽**: 🦀 Clawd — Claude Code CLI에 실제 내장된 공식 픽셀 스프라이트(쿼드런트 블록 아트,
   `clawd_body` 색상 rgb(215,119,87), 포즈: standing/look-left/look-right/arms-up)를 1:1 재현.
   옆걸음으로 순찰하며 남은 % 표시
-- **노치 오른쪽**: 🤖 Codex 봇 — 안테나 불빛과 표정으로 상태 표시
+- **노치 오른쪽**: 🤖 Codex — Codex CLI의 공식 대표 펫("The original Codex companion",
+  구름 머리에 터미널 얼굴 `>_`)을 사용. 스프라이트시트는 저장소에 포함하지 않고
+  Codex CLI와 동일하게 OpenAI CDN에서 실행 시 다운로드해 캐시(`~/Library/Caches/NotchUsage/`).
+  여유=달리기, 걱정=노트북 타이핑, 위험=슬픔(x_x), 오류=잠들기
 - **캐릭터 상태**: 여유(>50%) 느긋한 걸음 → 걱정(20~50%) 땀 흘리며 종종걸음 →
   위험(<20%) 부들부들 → 오류·토큰 만료 시 잠들어서 zzz
 - **마우스를 올리면 확장**: 두 서비스 각각의 5시간 세션 / 주간 한도 진행 바, 리셋 시각과 카운트다운, 종료 버튼
@@ -57,5 +60,6 @@ rm ~/Library/LaunchAgents/local.notchusage.plist
 - `Sources/NotchUsage/main.swift` — 앱 진입점 (Dock 아이콘 없는 accessory 앱)
 - `Sources/NotchUsage/AppDelegate.swift` — DynamicNotch 생성, 호버 시 확장/축소, 60초 폴링 루프
 - `Sources/NotchUsage/UsageModel.swift` — Claude 키체인/Codex auth.json 읽기, usage API 호출, 상태 모델
-- `Sources/NotchUsage/Characters.swift` — Clawd 게 / Codex 봇 캐릭터 (순수 SwiftUI 셰이프 애니메이션)
+- `Sources/NotchUsage/Characters.swift` — Clawd 스프라이트 렌더러 + 폴백 로봇
+- `Sources/NotchUsage/CodexPet.swift` — 공식 Codex 펫 스프라이트시트 로더/애니메이터
 - `Sources/NotchUsage/Views.swift` — 컴팩트/확장 SwiftUI 뷰

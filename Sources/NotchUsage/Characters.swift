@@ -55,17 +55,20 @@ enum ClawdSprite {
     static let gridWidth = 18
     static let gridHeight = 6
 
-    /// Official pose table (verbatim from the CLI's mini-Clawd component).
-    static func grid(pose: Pose, eyesClosed: Bool) -> [[Pixel]] {
-        let r1L: String, eye: String, r1R: String, r2L: String, r2R: String
+    /// Official pose table (from the CLI's mini-Clawd component). The eye row
+    /// is rendered solid here — the original punches single-quadrant holes for
+    /// eyes, which at widget scale read as notches, so ClawdView draws proper
+    /// eyes on top of the official silhouette instead.
+    static func grid(pose: Pose) -> [[Pixel]] {
+        let r1L: String, r1R: String, r2L: String, r2R: String
         switch pose {
-        case .standing:  (r1L, eye, r1R, r2L, r2R) = (" ▐", "▛███▜", "▌", "▝▜", "▛▘")
-        case .lookLeft:  (r1L, eye, r1R, r2L, r2R) = (" ▐", "▟███▟", "▌", "▝▜", "▛▘")
-        case .lookRight: (r1L, eye, r1R, r2L, r2R) = (" ▐", "▙███▙", "▌", "▝▜", "▛▘")
-        case .armsUp:    (r1L, eye, r1R, r2L, r2R) = ("▗▟", "▛███▜", "▙▖", " ▜", "▛ ")
+        case .standing, .lookLeft, .lookRight:
+            (r1L, r1R, r2L, r2R) = (" ▐", "▌", "▝▜", "▛▘")
+        case .armsUp:
+            (r1L, r1R, r2L, r2R) = ("▗▟", "▙▖", " ▜", "▛ ")
         }
         let rows: [[(text: String, onBlack: Bool)]] = [
-            [(r1L, false), (eyesClosed ? "█████" : eye, true), (r1R, false)],
+            [(r1L, false), ("█████", true), (r1R, false)],
             [(r2L, false), ("█████", true), (r2R, false)],
             [("  ▘▘ ▝▝  ", false)],
         ]
@@ -112,7 +115,10 @@ struct ClawdView: View {
     let t: TimeInterval
     var scale: CGFloat = 1
 
-    private var px: CGFloat { 1.7 * scale }
+    /// Terminal cells are ~twice as tall as wide, so a quadrant "pixel" is
+    /// 1:2 — rendering them square squashes the sprite flat.
+    private var pxW: CGFloat { 1.5 * scale }
+    private var pxH: CGFloat { 3.0 * scale }
 
     private var patrolPeriod: Double { mood == .happy ? 6.0 : 3.5 }
 
@@ -154,12 +160,12 @@ struct ClawdView: View {
 
     var body: some View {
         Canvas { context, _ in
-            let grid = ClawdSprite.grid(pose: pose, eyesClosed: eyesClosed)
+            let grid = ClawdSprite.grid(pose: pose)
             for (row, cells) in grid.enumerated() {
                 for (col, cell) in cells.enumerated() where cell != .clear {
                     let rect = CGRect(
-                        x: CGFloat(col) * px, y: CGFloat(row) * px,
-                        width: px + 0.3, height: px + 0.3
+                        x: CGFloat(col) * pxW, y: CGFloat(row) * pxH,
+                        width: pxW + 0.3, height: pxH + 0.3
                     )
                     context.fill(
                         Path(rect),
@@ -167,14 +173,42 @@ struct ClawdView: View {
                     )
                 }
             }
+            drawEyes(in: &context)
         }
-        .frame(width: CGFloat(ClawdSprite.gridWidth) * px, height: CGFloat(ClawdSprite.gridHeight) * px)
+        .frame(width: CGFloat(ClawdSprite.gridWidth) * pxW, height: CGFloat(ClawdSprite.gridHeight) * pxH)
         .overlay(alignment: .topTrailing) {
             if mood == .worried || mood == .critical { sweatDrop }
             if mood == .sleeping { sleepZs }
         }
         .offset(x: CGFloat(patrolPhase) * 5 + tremble, y: bob)
-        .frame(width: CGFloat(ClawdSprite.gridWidth) * px + 12, height: max(18, CGFloat(ClawdSprite.gridHeight) * px + 4))
+        .frame(width: CGFloat(ClawdSprite.gridWidth) * pxW + 12, height: max(18, CGFloat(ClawdSprite.gridHeight) * pxH))
+    }
+
+    /// Round-ish eyes at face height, glancing in the walking direction;
+    /// closed eyes become a horizontal line.
+    private func drawEyes(in context: inout GraphicsContext) {
+        let glance: CGFloat
+        switch pose {
+        case .lookLeft: glance = -1.2
+        case .lookRight: glance = 1.2
+        case .standing, .armsUp: glance = 0
+        }
+        let centerY = 1.8 * pxH // upper-middle of the face
+        for centerCol in [CGFloat(5.5), CGFloat(12.5)] {
+            let centerX = centerCol * pxW + glance * scale
+            let rect: CGRect
+            if eyesClosed {
+                rect = CGRect(x: centerX - 1.2 * scale, y: centerY - 0.5 * scale,
+                              width: 2.4 * scale, height: 1.0 * scale)
+            } else {
+                rect = CGRect(x: centerX - 1.0 * scale, y: centerY - 1.7 * scale,
+                              width: 2.0 * scale, height: 3.4 * scale)
+            }
+            context.fill(
+                Path(roundedRect: rect, cornerRadius: 0.9 * scale),
+                with: .color(.black)
+            )
+        }
     }
 
     private var sweatDrop: some View {

@@ -73,14 +73,16 @@ struct CompactTrailingView: View {
     @ObservedObject var model: UsageModel
 
     var body: some View {
-        let mood = Mood.from(window: model.codexFiveHour, hasError: model.codexErrorMessage != nil)
+        // A Plus plan may only report a weekly window — show what exists.
+        let window = model.codexFiveHour ?? model.codexSevenDay
+        let mood = Mood.from(window: window, hasError: model.codexErrorMessage != nil)
         TimelineView(.animation(minimumInterval: characterFPS)) { context in
             HStack(spacing: 2) {
-                Text(UsageFormat.percent(model.codexFiveHour?.remainingPercent))
+                Text(UsageFormat.percent(window?.remainingPercent))
                     .font(.system(size: 10, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(mood.tint)
-                CodexBotView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+                CodexPetView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
             }
         }
     }
@@ -130,20 +132,22 @@ struct ExpandedView: View {
                 Divider().overlay(Color.gray.opacity(0.4))
 
                 providerHeader(codexTitle) { t in
-                    CodexBotView(mood: codexMood, t: t, scale: 1.3)
+                    CodexPetView(mood: codexMood, t: t, scale: 1.3)
                 }
                 if let error = model.codexErrorMessage {
                     errorText(error)
                 } else {
-                    usageRow(
-                        title: "5시간 세션",
-                        window: model.codexFiveHour,
-                        resetText: "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: context.date))"
-                    )
+                    if model.codexFiveHour != nil {
+                        usageRow(
+                            title: "5시간 세션",
+                            window: model.codexFiveHour,
+                            resetText: "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: context.date))"
+                        )
+                    }
                     usageRow(
                         title: "주간",
                         window: model.codexSevenDay,
-                        resetText: "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋"
+                        resetText: "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexSevenDay?.resetsAt, from: context.date))"
                     )
                 }
             }
@@ -164,7 +168,10 @@ struct ExpandedView: View {
     }
 
     private var codexMood: Mood {
-        Mood.from(window: model.codexFiveHour, hasError: model.codexErrorMessage != nil)
+        Mood.from(
+            window: model.codexFiveHour ?? model.codexSevenDay,
+            hasError: model.codexErrorMessage != nil
+        )
     }
 
     private func providerHeader(_ title: String, @ViewBuilder character: @escaping (TimeInterval) -> some View) -> some View {
