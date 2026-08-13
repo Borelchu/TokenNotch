@@ -136,6 +136,10 @@ struct CodexPetView: View {
             )
             .frame(width: frameW, height: frameH, alignment: .topLeading)
             .clipped()
+            // .clipped() only masks drawing — the full spritesheet stays
+            // hit-testable and was extending the hover zone ~9 frames below
+            // the notch. Restrict hit geometry to the visible frame.
+            .contentShape(Rectangle())
     }
 
     private var sweatDrop: some View {
