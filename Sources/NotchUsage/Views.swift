@@ -40,9 +40,18 @@ enum UsageFormat {
 
     static func statusColor(remaining: Double?) -> Color {
         guard let remaining else { return .gray }
-        if remaining > 50 { return .green }
-        if remaining > 20 { return .yellow }
-        return .red
+        if remaining > 50 { return Color(red: 0.55, green: 0.85, blue: 0.45) }
+        if remaining > 20 { return Color(red: 1.0, green: 0.8, blue: 0.35) }
+        return Color(red: 1.0, green: 0.45, blue: 0.45)
+    }
+
+    static func phrase(for mood: Mood) -> String {
+        switch mood {
+        case .happy: return "아직 든든해요!"
+        case .worried: return "아껴 써야 해요…"
+        case .critical: return "거의 다 썼어요!!"
+        case .sleeping: return "쉬는 중… zzz"
+        }
     }
 }
 
@@ -50,7 +59,7 @@ enum UsageFormat {
 
 /// 10fps is plenty for the wiggle animations and keeps the always-on views
 /// cheap; time flows into the characters so motion is a pure function of it.
-private let characterFPS: Double = 1.0 / 10.0
+let characterFPS: Double = 1.0 / 10.0
 
 struct CompactLeadingView: View {
     @ObservedObject var model: UsageModel
@@ -61,9 +70,9 @@ struct CompactLeadingView: View {
             HStack(spacing: 2) {
                 ClawdView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
                 Text(UsageFormat.percent(model.fiveHour?.remainingPercent))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(mood.tint)
+                    .foregroundStyle(UsageFormat.statusColor(remaining: model.fiveHour?.remainingPercent))
             }
         }
     }
@@ -79,9 +88,9 @@ struct CompactTrailingView: View {
         TimelineView(.animation(minimumInterval: characterFPS)) { context in
             HStack(spacing: 2) {
                 Text(UsageFormat.percent(window?.remainingPercent))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(mood.tint)
+                    .foregroundStyle(UsageFormat.statusColor(remaining: window?.remainingPercent))
                 CodexPetView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
             }
         }
@@ -93,75 +102,38 @@ struct CompactTrailingView: View {
 struct ExpandedView: View {
     @ObservedObject var model: UsageModel
 
+    private let claudeTint = ClawdSprite.bodyColor
+    private let codexTint = Color(red: 0.47, green: 0.62, blue: 0.98)
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 header
 
-                providerHeader("Claude Code") { t in
-                    ClawdView(mood: claudeMood, t: t, scale: 1.3)
-                }
-                if let error = model.errorMessage {
-                    errorText(error)
-                }
-                usageRow(
-                    title: "5시간 세션",
-                    window: model.fiveHour,
-                    resetText: "\(UsageFormat.clockTime(model.fiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.fiveHour?.resetsAt, from: context.date))"
+                providerCard(
+                    title: "Claude Code",
+                    tint: claudeTint,
+                    mood: claudeMood,
+                    error: model.errorMessage,
+                    character: { t in ClawdView(mood: claudeMood, t: t, scale: 1.4) },
+                    rows: claudeRows(now: context.date)
                 )
-                usageRow(
-                    title: "주간 (전체)",
-                    window: model.sevenDay,
-                    resetText: "\(UsageFormat.dayTime(model.sevenDay?.resetsAt)) 리셋"
+
+                providerCard(
+                    title: codexTitle,
+                    tint: codexTint,
+                    mood: codexMood,
+                    error: model.codexErrorMessage,
+                    character: { t in CodexPetView(mood: codexMood, t: t, scale: 1.4) },
+                    rows: codexRows(now: context.date)
                 )
-                if model.sevenDayOpus?.utilization != nil {
-                    usageRow(
-                        title: "주간 (Opus)",
-                        window: model.sevenDayOpus,
-                        resetText: "\(UsageFormat.dayTime(model.sevenDayOpus?.resetsAt)) 리셋"
-                    )
-                }
-                if model.sevenDaySonnet?.utilization != nil {
-                    usageRow(
-                        title: "주간 (Sonnet)",
-                        window: model.sevenDaySonnet,
-                        resetText: "\(UsageFormat.dayTime(model.sevenDaySonnet?.resetsAt)) 리셋"
-                    )
-                }
-
-                Divider().overlay(Color.gray.opacity(0.4))
-
-                providerHeader(codexTitle) { t in
-                    CodexPetView(mood: codexMood, t: t, scale: 1.3)
-                }
-                if let error = model.codexErrorMessage {
-                    errorText(error)
-                } else {
-                    if model.codexFiveHour != nil {
-                        usageRow(
-                            title: "5시간 세션",
-                            window: model.codexFiveHour,
-                            resetText: "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: context.date))"
-                        )
-                    }
-                    usageRow(
-                        title: "주간",
-                        window: model.codexSevenDay,
-                        resetText: "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexSevenDay?.resetsAt, from: context.date))"
-                    )
-                }
             }
-            .padding(4)
-            .frame(width: 280)
+            .padding(6)
+            .frame(width: 296)
         }
     }
 
-    private var codexTitle: String {
-        if let plan = model.codexPlan, !plan.isEmpty {
-            return "Codex (\(plan))"
-        }
-        return "Codex"
-    }
+    // MARK: Moods
 
     private var claudeMood: Mood {
         Mood.from(window: model.fiveHour, hasError: model.errorMessage != nil)
@@ -174,65 +146,191 @@ struct ExpandedView: View {
         )
     }
 
-    private func providerHeader(_ title: String, @ViewBuilder character: @escaping (TimeInterval) -> some View) -> some View {
-        HStack(spacing: 6) {
-            TimelineView(.animation(minimumInterval: characterFPS)) { context in
-                character(context.date.timeIntervalSinceReferenceDate)
-            }
-            Text(title)
-                .font(.caption.bold())
-                .foregroundStyle(.white)
+    private var codexTitle: String {
+        if let plan = model.codexPlan, !plan.isEmpty {
+            return "Codex (\(plan.capitalized))"
         }
+        return "Codex"
     }
 
-    private func errorText(_ message: String) -> some View {
-        Text(message)
-            .font(.caption2)
-            .foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
+    // MARK: Rows
+
+    private func claudeRows(now: Date) -> [(String, UsageWindow?, String)] {
+        var rows: [(String, UsageWindow?, String)] = [
+            (
+                "5시간 세션",
+                model.fiveHour,
+                "\(UsageFormat.clockTime(model.fiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.fiveHour?.resetsAt, from: now))"
+            ),
+            (
+                "주간 (전체)",
+                model.sevenDay,
+                "\(UsageFormat.dayTime(model.sevenDay?.resetsAt)) 리셋"
+            ),
+        ]
+        if model.sevenDayOpus?.utilization != nil {
+            rows.append(("주간 (Opus)", model.sevenDayOpus, "\(UsageFormat.dayTime(model.sevenDayOpus?.resetsAt)) 리셋"))
+        }
+        if model.sevenDaySonnet?.utilization != nil {
+            rows.append(("주간 (Sonnet)", model.sevenDaySonnet, "\(UsageFormat.dayTime(model.sevenDaySonnet?.resetsAt)) 리셋"))
+        }
+        return rows
     }
+
+    private func codexRows(now: Date) -> [(String, UsageWindow?, String)] {
+        var rows: [(String, UsageWindow?, String)] = []
+        if model.codexFiveHour != nil {
+            rows.append((
+                "5시간 세션",
+                model.codexFiveHour,
+                "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: now))"
+            ))
+        }
+        rows.append((
+            "주간",
+            model.codexSevenDay,
+            "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexSevenDay?.resetsAt, from: now))"
+        ))
+        return rows
+    }
+
+    // MARK: Pieces
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 5) {
+            Text("✦")
+                .font(.system(size: 11, weight: .black))
+                .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
             Text("TokenNotch")
-                .font(.headline)
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
             Spacer()
             if let updated = model.lastUpdated {
-                Text(UsageFormat.clockTime(updated))
-                    .font(.caption2)
-                    .foregroundStyle(.gray)
+                Text("\(UsageFormat.clockTime(updated)) 갱신")
+                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.45))
             }
             Button {
                 NSApp.terminate(nil)
             } label: {
                 Image(systemName: "power")
-                    .font(.caption)
-                    .foregroundStyle(.gray)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(3)
+                    .background(Circle().fill(.white.opacity(0.1)))
             }
             .buttonStyle(.plain)
             .help("NotchUsage 종료")
         }
+        .padding(.horizontal, 2)
     }
 
-    private func usageRow(title: String, window: UsageWindow?, resetText: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func providerCard(
+        title: String,
+        tint: Color,
+        mood: Mood,
+        error: String?,
+        character: @escaping (TimeInterval) -> some View,
+        rows: [(String, UsageWindow?, String)]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                TimelineView(.animation(minimumInterval: characterFPS)) { context in
+                    character(context.date.timeIntervalSinceReferenceDate)
+                }
+                Text(title)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Spacer(minLength: 4)
+                speechBubble(UsageFormat.phrase(for: mood))
+            }
+
+            if let error {
+                Text(error)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ForEach(rows, id: \.0) { row in
+                cuteRow(title: row.0, window: row.1, resetText: row.2)
+            }
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(tint.opacity(0.13))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(tint.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    private func speechBubble(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.85))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(.white.opacity(0.12)))
+            .lineLimit(1)
+    }
+
+    private func cuteRow(title: String, window: UsageWindow?, resetText: String) -> some View {
+        let remaining = window?.remainingPercent
+        let color = UsageFormat.statusColor(remaining: remaining)
+        return VStack(alignment: .leading, spacing: 3.5) {
             HStack {
                 Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.white)
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.85))
                 Spacer()
-                Text("남음 \(UsageFormat.percent(window?.remainingPercent))")
-                    .font(.caption)
+                Text("남음 \(UsageFormat.percent(remaining))")
+                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(UsageFormat.statusColor(remaining: window?.remainingPercent))
+                    .foregroundStyle(.black.opacity(0.8))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1.5)
+                    .background(Capsule().fill(color))
             }
-            ProgressView(value: min(max(window?.utilization ?? 0, 0), 100), total: 100)
-                .tint(UsageFormat.statusColor(remaining: window?.remainingPercent))
+            HPBar(remainingFraction: (remaining ?? 0) / 100, color: color)
             Text(resetText)
-                .font(.caption2)
+                .font(.system(size: 8.5, weight: .medium, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.gray)
+                .foregroundStyle(.white.opacity(0.5))
         }
+    }
+}
+
+/// Game-style HP bar: the filled part is what you have LEFT.
+private struct HPBar: View {
+    let remainingFraction: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.1))
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.65)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
+                    .frame(width: max(7, geo.size.width * min(max(remainingFraction, 0), 1)))
+                    .overlay(alignment: .top) {
+                        // little glossy highlight, very video-gamey
+                        Capsule()
+                            .fill(.white.opacity(0.35))
+                            .frame(width: max(0, geo.size.width * min(max(remainingFraction, 0), 1) - 6), height: 1.6)
+                            .offset(y: 1.3)
+                    }
+            }
+        }
+        .frame(height: 7)
     }
 }
