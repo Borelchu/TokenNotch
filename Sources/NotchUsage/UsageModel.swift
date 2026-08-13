@@ -36,25 +36,23 @@ enum UsageError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .keychainNotFound:
-            return "키체인에서 Claude Code 자격 증명을 찾을 수 없습니다. Claude Code에 로그인돼 있는지 확인하세요."
+            return L10n.errKeychainNotFound
         case let .keychainDenied(status):
-            return "키체인 접근이 거부되었습니다 (\(status)). 접근 요청 시 '항상 허용'을 눌러주세요."
+            return L10n.errKeychainDenied(status)
         case .credentialsMalformed:
-            return "키체인의 자격 증명 형식을 해석할 수 없습니다."
+            return L10n.errCredentialsMalformed
         case .tokenExpired:
-            return "토큰이 만료되었습니다. Claude Code를 한 번 실행하면 갱신됩니다."
+            return L10n.errTokenExpired
         case let .http(code):
-            return code == 401
-                ? "인증 실패(401). Claude Code를 한 번 실행해 토큰을 갱신하세요."
-                : "API 오류 (HTTP \(code))"
+            return code == 401 ? L10n.errAuthFailed : L10n.errHTTP(code)
         case let .network(message):
-            return "네트워크 오류: \(message)"
+            return L10n.errNetwork(message)
         case .codexAuthNotFound:
-            return "~/.codex/auth.json이 없습니다. Codex CLI에 로그인돼 있는지 확인하세요."
+            return L10n.errCodexAuthNotFound
         case .codexAuthMalformed:
-            return "Codex 자격 증명 형식을 해석할 수 없습니다."
+            return L10n.errCodexAuthMalformed
         case .codexTokenExpired:
-            return "Codex 토큰이 만료되었습니다. codex를 한 번 실행하면 갱신됩니다."
+            return L10n.errCodexTokenExpired
         }
     }
 }
@@ -330,7 +328,7 @@ final class UsageModel: ObservableObject {
         case let error as UsageError:
             return error.errorDescription ?? "\(error)"
         case let error as DecodingError:
-            return "응답 해석 실패: \(error)"
+            return L10n.errDecode("\(error)")
         default:
             return UsageError.network(error.localizedDescription).errorDescription ?? "\(error)"
         }

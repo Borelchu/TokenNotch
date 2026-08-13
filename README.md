@@ -1,5 +1,7 @@
 # TokenNotch
 
+한국어 | [English](README.en.md)
+
 <p align="center">
   <img src="docs/hero.png" width="100%" alt="MacBook 노치 주변의 픽셀 캐릭터와 사용량 패널을 표현한 TokenNotch 히어로 이미지">
 </p>
@@ -57,6 +59,8 @@ swift build && .build/debug/NotchUsage
 - 이후 5분마다 두 서비스의 공식 사용량 API를 조회합니다
 
 Dock 아이콘과 메뉴바 아이콘은 없습니다. 오직 노치 옆에만 삽니다.
+
+UI 언어는 macOS 시스템 언어를 따라갑니다 (한국어 / 영어).
 
 ## 3. 화면 읽는 법
 
@@ -149,6 +153,7 @@ rm -rf dist ~/Library/Caches/NotchUsage
 - `Sources/NotchUsage/UsageModel.swift` — Claude 키체인/Codex auth.json 읽기, usage API 호출, 상태 모델
 - `Sources/NotchUsage/Characters.swift` — 공식 Clawd 스프라이트 렌더러 (+ Codex 폴백 로봇)
 - `Sources/NotchUsage/CodexPet.swift` — 공식 Codex 펫 스프라이트시트 로더/애니메이터
+- `Sources/NotchUsage/L10n.swift` — 시스템 언어 기반 한국어/영어 문자열
 - `Sources/NotchUsage/Views.swift` — 컴팩트/확장 SwiftUI 뷰, 표시 토글, HP바
 - `install.sh` — 릴리스 빌드 → .app 번들 생성 (+ `--autostart`로 LaunchAgent 등록)
 

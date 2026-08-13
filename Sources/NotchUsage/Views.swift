@@ -18,24 +18,24 @@ enum UsageFormat {
     static func dayTime(_ date: Date?) -> String {
         guard let date else { return "—" }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ko_KR")
-        formatter.dateFormat = "M/d(E) HH:mm"
+        formatter.locale = L10n.dayTimeLocale
+        formatter.dateFormat = L10n.dayTimeFormat
         return formatter.string(from: date)
     }
 
     static func countdown(to date: Date?, from now: Date = Date()) -> String {
         guard let date else { return "—" }
         let seconds = Int(date.timeIntervalSince(now))
-        if seconds <= 0 { return "곧 리셋" }
+        if seconds <= 0 { return L10n.resetSoon }
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         if hours >= 24 {
-            return "\(hours / 24)일 \(hours % 24)시간 후"
+            return L10n.inDaysHours(hours / 24, hours % 24)
         }
         if hours > 0 {
-            return "\(hours)시간 \(minutes)분 후"
+            return L10n.inHoursMinutes(hours, minutes)
         }
-        return "\(minutes)분 후"
+        return L10n.inMinutes(minutes)
     }
 
     static func statusColor(remaining: Double?) -> Color {
@@ -46,12 +46,7 @@ enum UsageFormat {
     }
 
     static func phrase(for mood: Mood) -> String {
-        switch mood {
-        case .happy: return "아직 든든해요!"
-        case .worried: return "아껴 써야 해요…"
-        case .critical: return "거의 다 썼어요!!"
-        case .sleeping: return "쉬는 중… zzz"
-        }
+        L10n.phrase(for: mood)
     }
 }
 
@@ -181,21 +176,21 @@ struct ExpandedView: View {
     private func claudeRows(now: Date) -> [(String, UsageWindow?, String)] {
         var rows: [(String, UsageWindow?, String)] = [
             (
-                "5시간 세션",
+                L10n.fiveHourSession,
                 model.fiveHour,
-                "\(UsageFormat.clockTime(model.fiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.fiveHour?.resetsAt, from: now))"
+                "\(L10n.resets(at: UsageFormat.clockTime(model.fiveHour?.resetsAt))) · \(UsageFormat.countdown(to: model.fiveHour?.resetsAt, from: now))"
             ),
             (
-                "주간 (전체)",
+                L10n.weeklyAll,
                 model.sevenDay,
-                "\(UsageFormat.dayTime(model.sevenDay?.resetsAt)) 리셋"
+                L10n.resets(at: UsageFormat.dayTime(model.sevenDay?.resetsAt))
             ),
         ]
         if model.sevenDayOpus?.utilization != nil {
-            rows.append(("주간 (Opus)", model.sevenDayOpus, "\(UsageFormat.dayTime(model.sevenDayOpus?.resetsAt)) 리셋"))
+            rows.append((L10n.weeklyOpus, model.sevenDayOpus, L10n.resets(at: UsageFormat.dayTime(model.sevenDayOpus?.resetsAt))))
         }
         if model.sevenDaySonnet?.utilization != nil {
-            rows.append(("주간 (Sonnet)", model.sevenDaySonnet, "\(UsageFormat.dayTime(model.sevenDaySonnet?.resetsAt)) 리셋"))
+            rows.append((L10n.weeklySonnet, model.sevenDaySonnet, L10n.resets(at: UsageFormat.dayTime(model.sevenDaySonnet?.resetsAt))))
         }
         return rows
     }
@@ -204,15 +199,15 @@ struct ExpandedView: View {
         var rows: [(String, UsageWindow?, String)] = []
         if model.codexFiveHour != nil {
             rows.append((
-                "5시간 세션",
+                L10n.fiveHourSession,
                 model.codexFiveHour,
-                "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: now))"
+                "\(L10n.resets(at: UsageFormat.clockTime(model.codexFiveHour?.resetsAt))) · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: now))"
             ))
         }
         rows.append((
-            "주간",
+            L10n.weekly,
             model.codexSevenDay,
-            "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexSevenDay?.resetsAt, from: now))"
+            "\(L10n.resets(at: UsageFormat.dayTime(model.codexSevenDay?.resetsAt))) · \(UsageFormat.countdown(to: model.codexSevenDay?.resetsAt, from: now))"
         ))
         return rows
     }
@@ -257,7 +252,7 @@ struct ExpandedView: View {
                     .background(Circle().fill(.white.opacity(0.1)))
             }
             .buttonStyle(.plain)
-            .help("NotchUsage 종료")
+            .help(L10n.quitHelp)
         }
         .padding(.horizontal, 2)
     }
@@ -290,7 +285,7 @@ struct ExpandedView: View {
                 .saturation(isOn ? 1 : 0)
         }
         .buttonStyle(.plain)
-        .help(isOn ? "노치에서 숨기기" : "노치에 표시")
+        .help(isOn ? L10n.chipHideHelp : L10n.chipShowHelp)
     }
 
     // MARK: Cards
@@ -387,7 +382,7 @@ struct ExpandedView: View {
                     .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                 Spacer()
-                Text("남음 \(UsageFormat.percent(remaining))")
+                Text(L10n.remainingBadge(UsageFormat.percent(remaining)))
                     .font(.system(size: 8.5, weight: .heavy, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.black.opacity(0.8))
