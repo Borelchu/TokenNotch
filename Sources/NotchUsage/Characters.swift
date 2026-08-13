@@ -26,125 +26,155 @@ enum Mood {
     }
 }
 
-// MARK: - Clawd (Claude's crab)
+// MARK: - Clawd (the official Claude Code pixel crab)
 
-/// A tiny orange crab drawn with plain SwiftUI shapes, sized for the
-/// menubar-height compact area. `t` is a continuous time value; all motion is
-/// a pure function of it so the view stays cheap to re-render.
+/// Faithful reproduction of the Clawd sprite shipped inside Claude Code's CLI.
+/// The original is terminal art built from quadrant block characters, three
+/// cells tall, with poses that only change the eye/claw glyphs:
+///
+///      ▐▛███▜▌        ▗▟▛███▜▙▖
+///     ▝▜█████▛▘        ▜█████▛      feet:  ▘▘ ▝▝
+///       ▘▘ ▝▝
+///     (standing)       (arms-up)
+///
+/// The eye row is drawn body-on-black, so the unfilled quadrants become the
+/// eyes. We decode each character into a 2×2 quadrant grid and render the
+/// result as square pixels — identical geometry to the terminal original.
+enum ClawdSprite {
+    /// clawd_body in every Claude Code theme: rgb(215,119,87)
+    static let bodyColor = Color(red: 215 / 255, green: 119 / 255, blue: 87 / 255)
+
+    enum Pose {
+        case standing, lookLeft, lookRight, armsUp
+    }
+
+    enum Pixel: UInt8 {
+        case clear, body, dark
+    }
+
+    static let gridWidth = 18
+    static let gridHeight = 6
+
+    /// Official pose table (verbatim from the CLI's mini-Clawd component).
+    static func grid(pose: Pose, eyesClosed: Bool) -> [[Pixel]] {
+        let r1L: String, eye: String, r1R: String, r2L: String, r2R: String
+        switch pose {
+        case .standing:  (r1L, eye, r1R, r2L, r2R) = (" ▐", "▛███▜", "▌", "▝▜", "▛▘")
+        case .lookLeft:  (r1L, eye, r1R, r2L, r2R) = (" ▐", "▟███▟", "▌", "▝▜", "▛▘")
+        case .lookRight: (r1L, eye, r1R, r2L, r2R) = (" ▐", "▙███▙", "▌", "▝▜", "▛▘")
+        case .armsUp:    (r1L, eye, r1R, r2L, r2R) = ("▗▟", "▛███▜", "▙▖", " ▜", "▛ ")
+        }
+        let rows: [[(text: String, onBlack: Bool)]] = [
+            [(r1L, false), (eyesClosed ? "█████" : eye, true), (r1R, false)],
+            [(r2L, false), ("█████", true), (r2R, false)],
+            [("  ▘▘ ▝▝  ", false)],
+        ]
+
+        var grid = Array(repeating: Array(repeating: Pixel.clear, count: gridWidth), count: gridHeight)
+        for (rowIndex, segments) in rows.enumerated() {
+            var col = 0
+            for segment in segments {
+                for ch in segment.text {
+                    let q = quads(ch)
+                    for (filled, dr, dc) in [(q.tl, 0, 0), (q.tr, 0, 1), (q.bl, 1, 0), (q.br, 1, 1)] {
+                        grid[rowIndex * 2 + dr][col * 2 + dc] =
+                            filled ? .body : (segment.onBlack ? .dark : .clear)
+                    }
+                    col += 1
+                }
+            }
+        }
+        return grid
+    }
+
+    private static func quads(_ c: Character) -> (tl: Bool, tr: Bool, bl: Bool, br: Bool) {
+        switch c {
+        case "█": return (true, true, true, true)
+        case "▛": return (true, true, true, false)
+        case "▜": return (true, true, false, true)
+        case "▙": return (true, false, true, true)
+        case "▟": return (false, true, true, true)
+        case "▐": return (false, true, false, true)
+        case "▌": return (true, false, true, false)
+        case "▀": return (true, true, false, false)
+        case "▄": return (false, false, true, true)
+        case "▘": return (true, false, false, false)
+        case "▝": return (false, true, false, false)
+        case "▖": return (false, false, true, false)
+        case "▗": return (false, false, false, true)
+        default:  return (false, false, false, false)
+        }
+    }
+}
+
 struct ClawdView: View {
     let mood: Mood
     let t: TimeInterval
     var scale: CGFloat = 1
 
-    private var walkSpeed: Double {
+    private var px: CGFloat { 1.7 * scale }
+
+    private var patrolPeriod: Double { mood == .happy ? 6.0 : 3.5 }
+
+    /// -1...1 triangle wave: Clawd patrols sideways, as crabs do.
+    private var patrolPhase: Double {
+        let phase = (t / patrolPeriod).truncatingRemainder(dividingBy: 1)
+        return abs(phase * 2 - 1) * 2 - 1
+    }
+
+    private var walking: Bool { mood == .happy || mood == .worried }
+
+    private var pose: ClawdSprite.Pose {
         switch mood {
-        case .happy: return 5
-        case .worried: return 10
-        case .critical: return 14
-        case .sleeping: return 0
+        case .sleeping: return .standing
+        case .critical: return .armsUp // panic!
+        case .happy, .worried:
+            // Raise arms briefly at each patrol turnaround, otherwise look
+            // where we're headed (triangle wave falls first, so falling = left).
+            if abs(patrolPhase) > 0.92 { return .armsUp }
+            let phase = (t / patrolPeriod).truncatingRemainder(dividingBy: 1)
+            return phase < 0.5 ? .lookLeft : .lookRight
         }
     }
 
-    /// Crabs walk sideways: patrol ±6pt inside the compact slot.
-    private var patrolOffset: CGFloat {
-        guard mood == .happy || mood == .worried else { return 0 }
-        let period: Double = mood == .happy ? 6.0 : 3.5
-        let phase = (t / period).truncatingRemainder(dividingBy: 1)
-        let triangle = abs(phase * 2 - 1) * 2 - 1 // -1...1 triangle wave
-        return CGFloat(triangle) * 6
+    private var eyesClosed: Bool {
+        if mood == .sleeping { return true }
+        let n = sin(t * 1.7) * sin(t * 2.3)
+        return n > 0.93
     }
 
     private var bob: CGFloat {
-        mood == .sleeping ? 0 : CGFloat(sin(t * walkSpeed)) * 1.2
+        guard walking else { return 0 }
+        return CGFloat(abs(sin(t * (mood == .happy ? 6 : 11)))) * -1.5
     }
 
     private var tremble: CGFloat {
         mood == .critical ? CGFloat(sin(t * 40)) * 0.8 : 0
     }
 
-    /// Blink roughly every ~4s using overlapping sines as cheap pseudo-noise.
-    private var blinking: Bool {
-        if mood == .sleeping { return true }
-        let n = sin(t * 1.7) * sin(t * 2.3)
-        return n > 0.93
-    }
-
-    private let clawdOrange = Color(red: 0.85, green: 0.47, blue: 0.34)
-
     var body: some View {
-        ZStack {
-            // Claws, tucked at the sides and bobbing out of phase
-            clawPair
-
-            // Legs
-            legRow
-
-            // Body
-            Ellipse()
-                .fill(clawdOrange)
-                .frame(width: 15, height: 10)
-                .offset(y: 2)
-
-            // Eyes
-            eyes
-
-            // Mood extras
-            if mood == .worried || mood == .critical {
-                sweatDrop
-            }
-            if mood == .sleeping {
-                sleepZs
+        Canvas { context, _ in
+            let grid = ClawdSprite.grid(pose: pose, eyesClosed: eyesClosed)
+            for (row, cells) in grid.enumerated() {
+                for (col, cell) in cells.enumerated() where cell != .clear {
+                    let rect = CGRect(
+                        x: CGFloat(col) * px, y: CGFloat(row) * px,
+                        width: px + 0.3, height: px + 0.3
+                    )
+                    context.fill(
+                        Path(rect),
+                        with: .color(cell == .body ? ClawdSprite.bodyColor : .black)
+                    )
+                }
             }
         }
-        .frame(width: 24, height: 18)
-        .offset(x: patrolOffset + tremble, y: bob)
-        .scaleEffect(scale)
-        .frame(width: 24 * scale, height: 18 * scale)
-    }
-
-    private var clawPair: some View {
-        ForEach(0..<2, id: \.self) { side in
-            let sign: CGFloat = side == 0 ? -1 : 1
-            let wave = sin(t * walkSpeed + Double(side) * .pi)
-            Circle()
-                .fill(clawdOrange)
-                .frame(width: 5.5, height: 5.5)
-                .overlay( // pincer notch
-                    Circle()
-                        .fill(.black)
-                        .frame(width: 2.2, height: 2.2)
-                        .offset(x: sign * 1.6, y: -1.2)
-                        .blendMode(.destinationOut)
-                )
-                .compositingGroup()
-                .offset(
-                    x: sign * 9,
-                    y: -1 + CGFloat(mood == .sleeping ? 0 : wave) * 1.2
-                )
+        .frame(width: CGFloat(ClawdSprite.gridWidth) * px, height: CGFloat(ClawdSprite.gridHeight) * px)
+        .overlay(alignment: .topTrailing) {
+            if mood == .worried || mood == .critical { sweatDrop }
+            if mood == .sleeping { sleepZs }
         }
-    }
-
-    private var legRow: some View {
-        ForEach(0..<3, id: \.self) { i in
-            let x = CGFloat(i - 1) * 4.4
-            let wave = mood == .sleeping ? 0 : sin(t * walkSpeed + Double(i) * 2.1)
-            Capsule()
-                .fill(clawdOrange.opacity(0.9))
-                .frame(width: 1.6, height: 4)
-                .offset(x: x, y: 7 + CGFloat(wave) * 0.8)
-        }
-    }
-
-    private var eyes: some View {
-        ForEach(0..<2, id: \.self) { side in
-            let sign: CGFloat = side == 0 ? -1 : 1
-            ZStack {
-                Circle().fill(.white).frame(width: 4.4, height: 4.4)
-                Circle().fill(.black).frame(width: 2, height: 2).offset(y: 0.3)
-            }
-            .scaleEffect(y: blinking ? 0.15 : 1)
-            .offset(x: sign * 3, y: -2.5)
-        }
+        .offset(x: CGFloat(patrolPhase) * 5 + tremble, y: bob)
+        .frame(width: CGFloat(ClawdSprite.gridWidth) * px + 12, height: max(18, CGFloat(ClawdSprite.gridHeight) * px + 4))
     }
 
     private var sweatDrop: some View {
@@ -152,10 +182,9 @@ struct ClawdView: View {
             .fill(Color(red: 0.4, green: 0.7, blue: 1.0))
             .frame(width: 2.6, height: 2.6)
             .offset(
-                x: 8,
-                y: -6 + CGFloat((t * 2).truncatingRemainder(dividingBy: 1)) * 3
+                x: 1,
+                y: -3 + CGFloat((t * 2).truncatingRemainder(dividingBy: 1)) * 4
             )
-            .opacity(mood == .critical ? 1 : 0.85)
     }
 
     private var sleepZs: some View {
@@ -163,7 +192,7 @@ struct ClawdView: View {
         return Text("z")
             .font(.system(size: 6, weight: .bold, design: .rounded))
             .foregroundStyle(.white.opacity(1 - phase))
-            .offset(x: 8, y: -4 - CGFloat(phase) * 5)
+            .offset(x: 2, y: -2 - CGFloat(phase) * 5)
     }
 }
 
