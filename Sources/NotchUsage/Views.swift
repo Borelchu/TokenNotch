@@ -55,6 +55,13 @@ enum UsageFormat {
     }
 }
 
+// MARK: - Display settings
+
+enum DisplaySettings {
+    static let showClaudeKey = "showClaude"
+    static let showCodexKey = "showCodex"
+}
+
 // MARK: - Compact views (always visible beside the notch)
 
 /// 10fps is plenty for the wiggle animations and keeps the always-on views
@@ -63,36 +70,46 @@ let characterFPS: Double = 1.0 / 10.0
 
 struct CompactLeadingView: View {
     @ObservedObject var model: UsageModel
+    @AppStorage(DisplaySettings.showClaudeKey) private var showClaude = true
 
     var body: some View {
-        let mood = Mood.from(window: model.fiveHour, hasError: model.errorMessage != nil)
-        TimelineView(.animation(minimumInterval: characterFPS)) { context in
-            HStack(spacing: 2) {
-                ClawdView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
-                Text(UsageFormat.percent(model.fiveHour?.remainingPercent))
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(UsageFormat.statusColor(remaining: model.fiveHour?.remainingPercent))
+        if showClaude {
+            let mood = Mood.from(window: model.fiveHour, hasError: model.errorMessage != nil)
+            TimelineView(.animation(minimumInterval: characterFPS)) { context in
+                HStack(spacing: 2) {
+                    ClawdView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+                    Text(UsageFormat.percent(model.fiveHour?.remainingPercent))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(UsageFormat.statusColor(remaining: model.fiveHour?.remainingPercent))
+                }
             }
+        } else {
+            Color.clear.frame(width: 1, height: 1)
         }
     }
 }
 
 struct CompactTrailingView: View {
     @ObservedObject var model: UsageModel
+    @AppStorage(DisplaySettings.showCodexKey) private var showCodex = true
 
     var body: some View {
-        // A Plus plan may only report a weekly window — show what exists.
-        let window = model.codexFiveHour ?? model.codexSevenDay
-        let mood = Mood.from(window: window, hasError: model.codexErrorMessage != nil)
-        TimelineView(.animation(minimumInterval: characterFPS)) { context in
-            HStack(spacing: 2) {
-                Text(UsageFormat.percent(window?.remainingPercent))
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(UsageFormat.statusColor(remaining: window?.remainingPercent))
-                CodexPetView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+        if showCodex {
+            // A Plus plan may only report a weekly window — show what exists.
+            let window = model.codexFiveHour ?? model.codexSevenDay
+            let mood = Mood.from(window: window, hasError: model.codexErrorMessage != nil)
+            TimelineView(.animation(minimumInterval: characterFPS)) { context in
+                HStack(spacing: 2) {
+                    Text(UsageFormat.percent(window?.remainingPercent))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(UsageFormat.statusColor(remaining: window?.remainingPercent))
+                    CodexPetView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+                }
             }
+        } else {
+            Color.clear.frame(width: 1, height: 1)
         }
     }
 }
@@ -101,6 +118,8 @@ struct CompactTrailingView: View {
 
 struct ExpandedView: View {
     @ObservedObject var model: UsageModel
+    @AppStorage(DisplaySettings.showClaudeKey) private var showClaude = true
+    @AppStorage(DisplaySettings.showCodexKey) private var showCodex = true
 
     private let claudeTint = ClawdSprite.bodyColor
     private let codexTint = Color(red: 0.47, green: 0.62, blue: 0.98)
@@ -110,23 +129,27 @@ struct ExpandedView: View {
             VStack(alignment: .leading, spacing: 8) {
                 header
 
-                providerCard(
-                    title: "Claude Code",
-                    tint: claudeTint,
-                    mood: claudeMood,
-                    error: model.errorMessage,
-                    character: { t in ClawdView(mood: claudeMood, t: t, scale: 1.4) },
-                    rows: claudeRows(now: context.date)
-                )
+                if showClaude {
+                    providerCard(
+                        title: "Claude Code",
+                        tint: claudeTint,
+                        mood: claudeMood,
+                        error: model.errorMessage,
+                        character: { t in ClawdView(mood: claudeMood, t: t, scale: 1.4) },
+                        rows: claudeRows(now: context.date)
+                    )
+                }
 
-                providerCard(
-                    title: codexTitle,
-                    tint: codexTint,
-                    mood: codexMood,
-                    error: model.codexErrorMessage,
-                    character: { t in CodexPetView(mood: codexMood, t: t, scale: 1.4) },
-                    rows: codexRows(now: context.date)
-                )
+                if showCodex {
+                    providerCard(
+                        title: codexTitle,
+                        tint: codexTint,
+                        mood: codexMood,
+                        error: model.codexErrorMessage,
+                        character: { t in CodexPetView(mood: codexMood, t: t, scale: 1.4) },
+                        rows: codexRows(now: context.date)
+                    )
+                }
             }
             .padding(6)
             .frame(width: 296)
@@ -194,19 +217,32 @@ struct ExpandedView: View {
         return rows
     }
 
-    // MARK: Pieces
+    // MARK: Header
 
     private var header: some View {
         HStack(spacing: 5) {
-            Text("✦")
-                .font(.system(size: 11, weight: .black))
-                .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
+            TimelineView(.animation(minimumInterval: 0.25)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                Text("✦")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
+                    .opacity(0.55 + 0.45 * sin(t * 3))
+            }
             Text("TokenNotch")
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
-            Spacer()
+
+            Spacer(minLength: 4)
+
+            providerChip(isOn: showClaude, tint: claudeTint, action: toggleClaude) {
+                ClawdView(mood: .happy, t: 0, scale: 0.7)
+            }
+            providerChip(isOn: showCodex, tint: codexTint, action: toggleCodex) {
+                CodexPetView(mood: .happy, t: 0.4, scale: 0.7)
+            }
+
             if let updated = model.lastUpdated {
-                Text("\(UsageFormat.clockTime(updated)) 갱신")
+                Text(UsageFormat.clockTime(updated))
                     .font(.system(size: 8.5, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.45))
@@ -226,6 +262,39 @@ struct ExpandedView: View {
         .padding(.horizontal, 2)
     }
 
+    /// Keep at least one provider visible.
+    private func toggleClaude() {
+        if showClaude, !showCodex { showCodex = true }
+        showClaude.toggle()
+    }
+
+    private func toggleCodex() {
+        if showCodex, !showClaude { showClaude = true }
+        showCodex.toggle()
+    }
+
+    private func providerChip(
+        isOn: Bool,
+        tint: Color,
+        action: @escaping () -> Void,
+        @ViewBuilder face: () -> some View
+    ) -> some View {
+        Button(action: action) {
+            face()
+                .frame(width: 24, height: 15)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(isOn ? tint.opacity(0.35) : .white.opacity(0.07)))
+                .overlay(Capsule().stroke(isOn ? tint.opacity(0.9) : .white.opacity(0.2), lineWidth: 1))
+                .opacity(isOn ? 1 : 0.4)
+                .saturation(isOn ? 1 : 0)
+        }
+        .buttonStyle(.plain)
+        .help(isOn ? "노치에서 숨기기" : "노치에 표시")
+    }
+
+    // MARK: Cards
+
     private func providerCard(
         title: String,
         tint: Color,
@@ -237,7 +306,14 @@ struct ExpandedView: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 7) {
                 TimelineView(.animation(minimumInterval: characterFPS)) { context in
-                    character(context.date.timeIntervalSinceReferenceDate)
+                    let t = context.date.timeIntervalSinceReferenceDate
+                    ZStack {
+                        character(t)
+                        if mood == .happy {
+                            sparkle(t: t, offset: 0)
+                            sparkle(t: t, offset: 0.55)
+                        }
+                    }
                 }
                 Text(title)
                     .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -263,9 +339,23 @@ struct ExpandedView: View {
                 .fill(tint.opacity(0.13))
         )
         .overlay(
+            // stitched-border look
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(tint.opacity(0.3), lineWidth: 1)
+                .stroke(tint.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3.5, 3]))
+                .padding(1.5)
         )
+    }
+
+    private func sparkle(t: TimeInterval, offset: Double) -> some View {
+        let phase = ((t / 2.4) + offset).truncatingRemainder(dividingBy: 1)
+        return Text("✦")
+            .font(.system(size: 6, weight: .black))
+            .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
+            .opacity((1 - phase) * 0.9)
+            .offset(
+                x: CGFloat(sin((phase + offset) * 2 * .pi)) * 12,
+                y: -6 - CGFloat(phase) * 9
+            )
     }
 
     private func speechBubble(_ text: String) -> some View {
@@ -274,7 +364,17 @@ struct ExpandedView: View {
             .foregroundStyle(.white.opacity(0.85))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(Capsule().fill(.white.opacity(0.12)))
+            .background(
+                Capsule().fill(.white.opacity(0.12))
+            )
+            .background(alignment: .leading) {
+                // bubble tail pointing back at the character
+                Rectangle()
+                    .fill(.white.opacity(0.12))
+                    .frame(width: 5, height: 5)
+                    .rotationEffect(.degrees(45))
+                    .offset(x: -2)
+            }
             .lineLimit(1)
     }
 
@@ -295,11 +395,21 @@ struct ExpandedView: View {
                     .padding(.vertical, 1.5)
                     .background(Capsule().fill(color))
             }
-            HPBar(remainingFraction: (remaining ?? 0) / 100, color: color)
-            Text(resetText)
-                .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.5))
+            HStack(spacing: 4) {
+                Text("♥")
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(color)
+                HPBar(remainingFraction: (remaining ?? 0) / 100, color: color)
+            }
+            HStack(spacing: 3) {
+                Image(systemName: "alarm")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.4))
+                Text(resetText)
+                    .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.5))
+            }
         }
     }
 }
