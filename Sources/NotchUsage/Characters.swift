@@ -8,7 +8,20 @@ enum Mood {
     case critical   // <20%: trembling
     case sleeping   // error / expired token: zzz
 
+    /// NOTCH_DEMO_MOOD=happy|worried|critical|sleeping forces every character
+    /// into that mood — for previewing animations without burning quota.
+    static let demoOverride: Mood? = {
+        switch ProcessInfo.processInfo.environment["NOTCH_DEMO_MOOD"] {
+        case "happy": return .happy
+        case "worried": return .worried
+        case "critical": return .critical
+        case "sleeping": return .sleeping
+        default: return nil
+        }
+    }()
+
     static func from(window: UsageWindow?, hasError: Bool) -> Mood {
+        if let demoOverride { return demoOverride }
         if hasError { return .sleeping }
         guard let remaining = window?.remainingPercent else { return .sleeping }
         if remaining > 50 { return .happy }
@@ -120,7 +133,14 @@ struct ClawdView: View {
     private var pxW: CGFloat { 1.5 * scale }
     private var pxH: CGFloat { 3.0 * scale }
 
-    private var patrolPeriod: Double { mood == .happy ? 6.0 : 3.5 }
+    private var patrolPeriod: Double {
+        switch mood {
+        case .happy: return 6.0
+        case .worried: return 3.5
+        case .critical: return 1.6 // frantic dashing
+        case .sleeping: return 1
+        }
+    }
 
     /// -1...1 triangle wave: Clawd patrols sideways, as crabs do.
     private var patrolPhase: Double {
@@ -128,19 +148,16 @@ struct ClawdView: View {
         return abs(phase * 2 - 1) * 2 - 1
     }
 
-    private var walking: Bool { mood == .happy || mood == .worried }
+    private var walking: Bool { mood != .sleeping }
 
     private var pose: ClawdSprite.Pose {
-        switch mood {
-        case .sleeping: return .standing
-        case .critical: return .armsUp // panic!
-        case .happy, .worried:
-            // Raise arms briefly at each patrol turnaround, otherwise look
-            // where we're headed (triangle wave falls first, so falling = left).
-            if abs(patrolPhase) > 0.92 { return .armsUp }
-            let phase = (t / patrolPeriod).truncatingRemainder(dividingBy: 1)
-            return phase < 0.5 ? .lookLeft : .lookRight
-        }
+        guard mood != .sleeping else { return .standing }
+        // Raise arms briefly at each patrol turnaround, otherwise look
+        // where we're headed (triangle wave falls first, so falling = left).
+        // In critical mood the short period turns this into panicked flailing.
+        if abs(patrolPhase) > 0.88 { return .armsUp }
+        let phase = (t / patrolPeriod).truncatingRemainder(dividingBy: 1)
+        return phase < 0.5 ? .lookLeft : .lookRight
     }
 
     private var eyesClosed: Bool {
@@ -151,11 +168,14 @@ struct ClawdView: View {
 
     private var bob: CGFloat {
         guard walking else { return 0 }
-        return CGFloat(abs(sin(t * (mood == .happy ? 6 : 11)))) * -1.5
-    }
-
-    private var tremble: CGFloat {
-        mood == .critical ? CGFloat(sin(t * 40)) * 0.8 : 0
+        let frequency: Double
+        let amplitude: CGFloat
+        switch mood {
+        case .happy: (frequency, amplitude) = (6, 1.5)
+        case .worried: (frequency, amplitude) = (11, 1.5)
+        default: (frequency, amplitude) = (14, 2.4) // bouncy panic hops
+        }
+        return CGFloat(abs(sin(t * frequency))) * -amplitude
     }
 
     var body: some View {
@@ -180,8 +200,8 @@ struct ClawdView: View {
             if mood == .worried || mood == .critical { sweatDrop }
             if mood == .sleeping { sleepZs }
         }
-        .offset(x: CGFloat(patrolPhase) * 5 + tremble, y: bob)
-        .frame(width: CGFloat(ClawdSprite.gridWidth) * pxW + 12, height: max(18, CGFloat(ClawdSprite.gridHeight) * pxH))
+        .offset(x: CGFloat(patrolPhase) * (mood == .critical ? 7 : 5), y: bob)
+        .frame(width: CGFloat(ClawdSprite.gridWidth) * pxW + 16, height: max(18, CGFloat(ClawdSprite.gridHeight) * pxH))
     }
 
     /// Round-ish eyes at face height, glancing in the walking direction;
@@ -212,12 +232,13 @@ struct ClawdView: View {
     }
 
     private var sweatDrop: some View {
-        Circle()
+        let dripSpeed: Double = mood == .critical ? 3.5 : 2
+        return Circle()
             .fill(Color(red: 0.4, green: 0.7, blue: 1.0))
             .frame(width: 2.6, height: 2.6)
             .offset(
                 x: 1,
-                y: -3 + CGFloat((t * 2).truncatingRemainder(dividingBy: 1)) * 4
+                y: -3 + CGFloat((t * dripSpeed).truncatingRemainder(dividingBy: 1)) * 4
             )
     }
 
