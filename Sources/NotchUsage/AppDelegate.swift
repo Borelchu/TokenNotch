@@ -21,22 +21,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.notch = notch
 
+        // NOTCH_DEMO=expand pins the expanded panel open (used for README captures).
+        let demoExpand = ProcessInfo.processInfo.environment["NOTCH_DEMO"] == "expand"
+
         // Compact by default; expand while the pointer is over the notch.
-        hoverCancellable = notch.$isHovering
-            .removeDuplicates()
-            .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
-            .sink { hovering in
-                Task { @MainActor in
-                    if hovering {
-                        await notch.expand()
-                    } else {
-                        await notch.compact()
+        if !demoExpand {
+            hoverCancellable = notch.$isHovering
+                .removeDuplicates()
+                .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
+                .sink { hovering in
+                    Task { @MainActor in
+                        if hovering {
+                            await notch.expand()
+                        } else {
+                            await notch.compact()
+                        }
                     }
                 }
-            }
+        }
 
         pollTask = Task { @MainActor in
-            await notch.compact()
+            if demoExpand {
+                await notch.expand()
+            } else {
+                await notch.compact()
+            }
             while !Task.isCancelled {
                 await model.refresh()
                 // 5-minute floor: the Claude usage endpoint rate-limits

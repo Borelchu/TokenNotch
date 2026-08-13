@@ -3,6 +3,13 @@
 맥북 노치 옆에서 **Clawd(Claude Code 공식 픽셀 게)** 와 **Codex 펫(Codex CLI 공식 컴패니언)** 이 살면서
 Claude Code / Codex CLI의 남은 사용량과 세션 리셋 시간을 알려주는 위젯입니다.
 
+<p align="center">
+  <img src="docs/compact.gif" width="520" alt="노치 옆 컴팩트 화면 — Clawd와 Codex 펫이 남은 %와 함께 표시">
+</p>
+<p align="center">
+  <img src="docs/expanded.gif" width="330" alt="호버 시 확장 화면 — 서비스별 카드, HP바, 리셋 카운트다운, 표시 토글">
+</p>
+
 - 🦀 **노치 왼쪽 — Clawd**: Claude Code CLI에 실제 내장된 공식 스프라이트(쿼드런트 블록 아트,
   `clawd_body` 색상 rgb(215,119,87), 포즈 4종)를 1:1 재현. 옆걸음으로 순찰하며 남은 % 표시
 - 🤖 **노치 오른쪽 — Codex 펫**: Codex CLI의 공식 대표 펫 "The original Codex companion".
