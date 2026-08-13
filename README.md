@@ -4,10 +4,11 @@
 Claude Code / Codex CLI의 남은 사용량과 세션 리셋 시간을 알려주는 위젯입니다.
 
 <p align="center">
-  <img src="docs/compact.gif" width="520" alt="노치 옆 컴팩트 화면 — Clawd와 Codex 펫이 남은 %와 함께 표시">
+  <img src="docs/notchdemo.gif" width="760" alt="TokenNotch 데모 — 노치 옆 캐릭터, 호버 시 확장 패널, 표시 토글">
 </p>
+
 <p align="center">
-  <img src="docs/expanded.gif" width="330" alt="호버 시 확장 화면 — 서비스별 카드, HP바, 리셋 카운트다운, 표시 토글">
+  <img src="docs/expanded.gif" width="330" alt="확장 화면 자세히 — 서비스별 카드, HP바, 리셋 카운트다운">
 </p>
 
 - 🦀 **노치 왼쪽 — Clawd**: Claude Code CLI에 실제 내장된 공식 스프라이트(쿼드런트 블록 아트,
