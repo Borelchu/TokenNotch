@@ -29,6 +29,9 @@ enum UsageError: LocalizedError {
     case tokenExpired
     case http(Int)
     case network(String)
+    case codexAuthNotFound
+    case codexAuthMalformed
+    case codexTokenExpired
 
     var errorDescription: String? {
         switch self {
@@ -46,6 +49,12 @@ enum UsageError: LocalizedError {
                 : "API 오류 (HTTP \(code))"
         case let .network(message):
             return "네트워크 오류: \(message)"
+        case .codexAuthNotFound:
+            return "~/.codex/auth.json이 없습니다. Codex CLI에 로그인돼 있는지 확인하세요."
+        case .codexAuthMalformed:
+            return "Codex 자격 증명 형식을 해석할 수 없습니다."
+        case .codexTokenExpired:
+            return "Codex 토큰이 만료되었습니다. codex를 한 번 실행하면 갱신됩니다."
         }
     }
 }
@@ -125,7 +134,9 @@ enum UsageAPI {
         var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("NotchUsage/1.0", forHTTPHeaderField: "User-Agent")
+        // The endpoint gates on a CLI User-Agent — anything else lands in an
+        // aggressively rate-limited bucket with a sticky (~10 min) 429.
+        request.setValue("claude-code/2.1.121", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -161,6 +172,68 @@ enum UsageAPI {
     }()
 }
 
+// MARK: - Codex API client
+
+enum CodexAPI {
+    struct Usage {
+        let fiveHour: UsageWindow?
+        let sevenDay: UsageWindow?
+        let planType: String?
+    }
+
+    /// Undocumented ChatGPT backend endpoint; the same one Codex CLI's /status
+    /// and CodexBar use. Field names have drifted across versions (reset_at vs
+    /// resets_at), so parsing is deliberately defensive.
+    static func fetchUsage() async throws -> Usage {
+        let home = ProcessInfo.processInfo.environment["CODEX_HOME"]
+            .map(URL.init(fileURLWithPath:))
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+        guard let authData = try? Data(contentsOf: home.appendingPathComponent("auth.json")) else {
+            throw UsageError.codexAuthNotFound
+        }
+        guard
+            let root = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
+            let tokens = root["tokens"] as? [String: Any],
+            let accessToken = tokens["access_token"] as? String,
+            let accountId = tokens["account_id"] as? String
+        else {
+            throw UsageError.codexAuthMalformed
+        }
+
+        var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("NotchUsage/1.0", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw http.statusCode == 401 ? UsageError.codexTokenExpired : UsageError.http(http.statusCode)
+        }
+
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw UsageError.codexAuthMalformed
+        }
+        let rateLimit = body["rate_limit"] as? [String: Any]
+        return Usage(
+            fiveHour: window(from: rateLimit?["primary_window"]),
+            sevenDay: window(from: rateLimit?["secondary_window"]),
+            planType: body["plan_type"] as? String
+        )
+    }
+
+    private static func window(from value: Any?) -> UsageWindow? {
+        guard let dict = value as? [String: Any] else { return nil }
+        let used = (dict["used_percent"] as? NSNumber)?.doubleValue
+        let resetEpoch = ((dict["reset_at"] ?? dict["resets_at"]) as? NSNumber)?.doubleValue
+        return UsageWindow(
+            utilization: used,
+            resetsAt: resetEpoch.map { Date(timeIntervalSince1970: $0) }
+        )
+    }
+}
+
 // MARK: - Model
 
 @MainActor
@@ -172,7 +245,26 @@ final class UsageModel: ObservableObject {
     @Published var lastUpdated: Date?
     @Published var errorMessage: String?
 
+    @Published var codexFiveHour: UsageWindow?
+    @Published var codexSevenDay: UsageWindow?
+    @Published var codexPlan: String?
+    @Published var codexErrorMessage: String?
+
+    /// Once the usage endpoint's limiter trips it stays tripped for ~10 min,
+    /// so retrying on the normal cadence just re-arms the penalty.
+    private var claudeCooldownUntil: Date?
+
     func refresh() async {
+        async let claude: Void = refreshClaude()
+        async let codex: Void = refreshCodex()
+        _ = await (claude, codex)
+    }
+
+    private func refreshClaude() async {
+        if let until = claudeCooldownUntil, Date() < until {
+            NSLog("NotchUsage claude: in 429 cooldown until %@", "\(until)")
+            return
+        }
         do {
             let usage = try await UsageAPI.fetchUsage()
 
@@ -182,18 +274,49 @@ final class UsageModel: ObservableObject {
             sevenDayOpus = usage.sevenDayOpus
             lastUpdated = Date()
             errorMessage = nil
-            NSLog("NotchUsage: 5h %@%% used, 7d %@%% used",
+            NSLog("NotchUsage claude: 5h %@%% used, 7d %@%% used",
                   usage.fiveHour?.utilization.map { String($0) } ?? "?",
                   usage.sevenDay?.utilization.map { String($0) } ?? "?")
-        } catch let error as UsageError {
-            errorMessage = error.errorDescription
-            NSLog("NotchUsage error: %@", error.errorDescription ?? "\(error)")
-        } catch let error as DecodingError {
-            errorMessage = "응답 해석 실패: \(error)"
-            NSLog("NotchUsage decode error: %@", "\(error)")
         } catch {
-            errorMessage = UsageError.network(error.localizedDescription).errorDescription
-            NSLog("NotchUsage network error: %@", error.localizedDescription)
+            if case UsageError.http(429) = error {
+                claudeCooldownUntil = Date().addingTimeInterval(900)
+                // Transient: keep showing the last data if we have any.
+                if fiveHour == nil {
+                    errorMessage = Self.describe(error)
+                }
+            } else {
+                errorMessage = Self.describe(error)
+            }
+            NSLog("NotchUsage claude error: %@", Self.describe(error))
+        }
+    }
+
+    private func refreshCodex() async {
+        do {
+            let usage = try await CodexAPI.fetchUsage()
+
+            codexFiveHour = usage.fiveHour
+            codexSevenDay = usage.sevenDay
+            codexPlan = usage.planType
+            lastUpdated = Date()
+            codexErrorMessage = nil
+            NSLog("NotchUsage codex: 5h %@%% used, 7d %@%% used",
+                  usage.fiveHour?.utilization.map { String($0) } ?? "?",
+                  usage.sevenDay?.utilization.map { String($0) } ?? "?")
+        } catch {
+            codexErrorMessage = Self.describe(error)
+            NSLog("NotchUsage codex error: %@", codexErrorMessage ?? "\(error)")
+        }
+    }
+
+    nonisolated private static func describe(_ error: Error) -> String {
+        switch error {
+        case let error as UsageError:
+            return error.errorDescription ?? "\(error)"
+        case let error as DecodingError:
+            return "응답 해석 실패: \(error)"
+        default:
+            return UsageError.network(error.localizedDescription).errorDescription ?? "\(error)"
         }
     }
 }

@@ -39,7 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await notch.compact()
             while !Task.isCancelled {
                 await model.refresh()
-                try? await Task.sleep(for: .seconds(60))
+                // 5-minute floor: the Claude usage endpoint rate-limits
+                // anything more frequent (sticky ~10 min 429 once tripped).
+                try? await Task.sleep(for: .seconds(300))
             }
         }
     }

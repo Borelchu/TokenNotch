@@ -48,13 +48,24 @@ enum UsageFormat {
 
 // MARK: - Compact views (always visible beside the notch)
 
+/// 10fps is plenty for the wiggle animations and keeps the always-on views
+/// cheap; time flows into the characters so motion is a pure function of it.
+private let characterFPS: Double = 1.0 / 10.0
+
 struct CompactLeadingView: View {
     @ObservedObject var model: UsageModel
 
     var body: some View {
-        Image(systemName: model.errorMessage == nil ? "asterisk" : "exclamationmark.triangle.fill")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(UsageFormat.statusColor(remaining: model.fiveHour?.remainingPercent))
+        let mood = Mood.from(window: model.fiveHour, hasError: model.errorMessage != nil)
+        TimelineView(.animation(minimumInterval: characterFPS)) { context in
+            HStack(spacing: 2) {
+                ClawdView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+                Text(UsageFormat.percent(model.fiveHour?.remainingPercent))
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(mood.tint)
+            }
+        }
     }
 }
 
@@ -62,17 +73,16 @@ struct CompactTrailingView: View {
     @ObservedObject var model: UsageModel
 
     var body: some View {
-        Text(trailingText)
-            .font(.system(size: 11, weight: .semibold))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-    }
-
-    private var trailingText: String {
-        guard model.errorMessage == nil else { return "!" }
-        let remaining = UsageFormat.percent(model.fiveHour?.remainingPercent)
-        let reset = UsageFormat.clockTime(model.fiveHour?.resetsAt)
-        return "\(remaining) · \(reset)"
+        let mood = Mood.from(window: model.codexFiveHour, hasError: model.codexErrorMessage != nil)
+        TimelineView(.animation(minimumInterval: characterFPS)) { context in
+            HStack(spacing: 2) {
+                Text(UsageFormat.percent(model.codexFiveHour?.remainingPercent))
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(mood.tint)
+                CodexBotView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
+            }
+        }
     }
 }
 
@@ -86,13 +96,12 @@ struct ExpandedView: View {
             VStack(alignment: .leading, spacing: 10) {
                 header
 
-                if let error = model.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                providerHeader("Claude Code") { t in
+                    ClawdView(mood: claudeMood, t: t, scale: 1.3)
                 }
-
+                if let error = model.errorMessage {
+                    errorText(error)
+                }
                 usageRow(
                     title: "5시간 세션",
                     window: model.fiveHour,
@@ -117,15 +126,68 @@ struct ExpandedView: View {
                         resetText: "\(UsageFormat.dayTime(model.sevenDaySonnet?.resetsAt)) 리셋"
                     )
                 }
+
+                Divider().overlay(Color.gray.opacity(0.4))
+
+                providerHeader(codexTitle) { t in
+                    CodexBotView(mood: codexMood, t: t, scale: 1.3)
+                }
+                if let error = model.codexErrorMessage {
+                    errorText(error)
+                } else {
+                    usageRow(
+                        title: "5시간 세션",
+                        window: model.codexFiveHour,
+                        resetText: "\(UsageFormat.clockTime(model.codexFiveHour?.resetsAt)) 리셋 · \(UsageFormat.countdown(to: model.codexFiveHour?.resetsAt, from: context.date))"
+                    )
+                    usageRow(
+                        title: "주간",
+                        window: model.codexSevenDay,
+                        resetText: "\(UsageFormat.dayTime(model.codexSevenDay?.resetsAt)) 리셋"
+                    )
+                }
             }
             .padding(4)
             .frame(width: 280)
         }
     }
 
+    private var codexTitle: String {
+        if let plan = model.codexPlan, !plan.isEmpty {
+            return "Codex (\(plan))"
+        }
+        return "Codex"
+    }
+
+    private var claudeMood: Mood {
+        Mood.from(window: model.fiveHour, hasError: model.errorMessage != nil)
+    }
+
+    private var codexMood: Mood {
+        Mood.from(window: model.codexFiveHour, hasError: model.codexErrorMessage != nil)
+    }
+
+    private func providerHeader(_ title: String, @ViewBuilder character: @escaping (TimeInterval) -> some View) -> some View {
+        HStack(spacing: 6) {
+            TimelineView(.animation(minimumInterval: characterFPS)) { context in
+                character(context.date.timeIntervalSinceReferenceDate)
+            }
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func errorText(_ message: String) -> some View {
+        Text(message)
+            .font(.caption2)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var header: some View {
         HStack {
-            Text("Claude Code 사용량")
+            Text("TokenNotch")
                 .font(.headline)
                 .foregroundStyle(.white)
             Spacer()
