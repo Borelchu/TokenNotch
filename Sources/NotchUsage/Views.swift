@@ -68,8 +68,18 @@ enum DisplaySettings {
 /// cheap; time flows into the characters so motion is a pure function of it.
 let characterFPS: Double = 1.0 / 10.0
 
+/// DynamicNotchKit's own hover covers the whole black pill, including the
+/// ~200pt of bare notch in the middle — far too easy to trigger by just
+/// mousing toward the menu bar. Expansion is driven from here instead:
+/// only hovering the actual character/percent areas counts.
+@MainActor
+final class HoverIntent: ObservableObject {
+    @Published var overCompactContent = false
+}
+
 struct CompactLeadingView: View {
     @ObservedObject var model: UsageModel
+    @ObservedObject var hoverIntent: HoverIntent
     @AppStorage(DisplaySettings.showClaudeKey) private var showClaude = true
 
     var body: some View {
@@ -84,6 +94,7 @@ struct CompactLeadingView: View {
                         .foregroundStyle(UsageFormat.statusColor(remaining: model.fiveHour?.remainingPercent))
                 }
             }
+            .onHover { hoverIntent.overCompactContent = $0 }
         } else {
             Color.clear.frame(width: 1, height: 1)
         }
@@ -92,6 +103,7 @@ struct CompactLeadingView: View {
 
 struct CompactTrailingView: View {
     @ObservedObject var model: UsageModel
+    @ObservedObject var hoverIntent: HoverIntent
     @AppStorage(DisplaySettings.showCodexKey) private var showCodex = true
 
     var body: some View {
@@ -108,6 +120,7 @@ struct CompactTrailingView: View {
                     CodexPetView(mood: mood, t: context.date.timeIntervalSinceReferenceDate)
                 }
             }
+            .onHover { hoverIntent.overCompactContent = $0 }
         } else {
             Color.clear.frame(width: 1, height: 1)
         }

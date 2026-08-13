@@ -1,5 +1,9 @@
 # TokenNotch
 
+<p align="center">
+  <img src="docs/hero.png" width="100%" alt="MacBook 노치 주변의 픽셀 캐릭터와 사용량 패널을 표현한 TokenNotch 히어로 이미지">
+</p>
+
 맥북 노치 옆에서 **Clawd(Claude Code 공식 픽셀 게)** 와 **Codex 펫(Codex CLI 공식 컴패니언)** 이 살면서
 Claude Code / Codex CLI의 남은 사용량과 세션 리셋 시간을 알려주는 위젯입니다.
 
