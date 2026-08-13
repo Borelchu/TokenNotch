@@ -113,26 +113,7 @@ UI 언어는 macOS 시스템 언어를 따라갑니다 (한국어 / 영어).
 - Codex의 세션/주간 창은 위치가 아니라 `limit_window_seconds`로 판별합니다
   (Plus 요금제는 주간 창만 내려오는 경우가 있음).
 
-## 6. 문제 해결
-
-| 증상 | 원인 / 해결 |
-|---|---|
-| Clawd가 자면서 "키체인에서 자격 증명을 찾을 수 없습니다" | Claude Code에 로그인돼 있는지 확인 (`claude` 실행 → `/login`) |
-| "키체인 접근이 거부되었습니다" | 접근 대화상자에서 "항상 허용" 클릭. 개발 빌드는 리빌드마다 서명이 바뀌어 다시 물어볼 수 있음 |
-| "토큰이 만료되었습니다" | 터미널에서 `claude`(또는 `codex`)를 한 번 실행하면 자동 갱신 |
-| "API 오류 (HTTP 429)" | 일시적 rate limit. 마지막 데이터를 유지한 채 15분 뒤 자동 재시도하므로 기다리면 됨 |
-| Codex 펫이 다운로드 전 임시 로봇으로 나옴 | 네트워크 연결 후 다음 실행 시 공식 스프라이트로 교체됨 |
-| 캐릭터 위치가 이상함 / 표시가 안 됨 | 노치 없는 외장 모니터가 주 화면이면 컴팩트 모드가 지원되지 않음. 내장 디스플레이에서 확인 |
-| 수치가 `—`로 나옴 | 아직 첫 조회 전이거나 해당 창(예: Codex 5시간)이 요금제에 없는 것 |
-
-로그 확인이 필요하면 터미널에서 직접 실행하세요:
-
-```bash
-.build/debug/NotchUsage
-# NotchUsage claude: 5h 46.0% used ... 형식의 로그가 출력됨
-```
-
-## 7. 종료 / 제거
+## 6. 종료 / 제거
 
 ```bash
 # 종료: 확장 뷰의 ⏻ 버튼, 또는
@@ -146,7 +127,7 @@ rm ~/Library/LaunchAgents/local.notchusage.plist
 rm -rf dist ~/Library/Caches/NotchUsage
 ```
 
-## 8. 파일 구성
+## 7. 파일 구성
 
 - `Sources/NotchUsage/main.swift` — 앱 진입점 (Dock 아이콘 없는 accessory 앱)
 - `Sources/NotchUsage/AppDelegate.swift` — DynamicNotch 생성, 호버 시 확장/축소, 5분 폴링 루프
@@ -156,10 +137,3 @@ rm -rf dist ~/Library/Caches/NotchUsage
 - `Sources/NotchUsage/L10n.swift` — 시스템 언어 기반 한국어/영어 문자열
 - `Sources/NotchUsage/Views.swift` — 컴팩트/확장 SwiftUI 뷰, 표시 토글, HP바
 - `install.sh` — 릴리스 빌드 → .app 번들 생성 (+ `--autostart`로 LaunchAgent 등록)
-
-UI는 [DynamicNotchKit](https://github.com/MrKai77/DynamicNotchKit) (MIT) 위에서 동작하며,
-컨셉과 폴링 정책은 [CodexIsland](https://github.com/ericjypark/codex-island)를 참고했습니다.
-
-> ⚠️ Clawd와 Codex 펫 아트워크는 각각 Anthropic과 OpenAI의 IP입니다.
-> 이 프로젝트는 개인용 위젯이며 에셋을 재배포하지 않습니다
-> (Clawd는 코드로 재현, Codex 펫은 공식 CDN에서 런타임 다운로드).
