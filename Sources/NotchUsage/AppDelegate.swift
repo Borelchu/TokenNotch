@@ -6,7 +6,6 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = UsageModel()
-    private let hoverIntent = HoverIntent()
     private var notch: DynamicNotch<ExpandedView, CompactLeadingView, CompactTrailingView>?
     private var expandCancellable: AnyCancellable?
     private var collapseCancellable: AnyCancellable?
@@ -14,13 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let model = self.model
-        let hoverIntent = self.hoverIntent
         let notch = DynamicNotch(hoverBehavior: .all) {
             ExpandedView(model: model)
         } compactLeading: {
-            CompactLeadingView(model: model, hoverIntent: hoverIntent)
+            CompactLeadingView(model: model)
         } compactTrailing: {
-            CompactTrailingView(model: model, hoverIntent: hoverIntent)
+            CompactTrailingView(model: model)
         }
         self.notch = notch
 
@@ -28,20 +26,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let demoExpand = ProcessInfo.processInfo.environment["NOTCH_DEMO"] == "expand"
 
         if !demoExpand {
-            // Expand only from the character/percent areas — DynamicNotchKit's
-            // own isHovering also covers the bare notch middle, which made the
-            // trigger zone far too big. The short debounce filters drive-bys.
-            expandCancellable = hoverIntent.$overCompactContent
+            // The whole pill (characters + the notch between them) is the
+            // trigger area; the 200ms dwell keeps drive-by mouse sweeps from
+            // popping the panel open.
+            expandCancellable = notch.$isHovering
                 .removeDuplicates()
-                .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-                .sink { over in
-                    guard over else { return }
+                .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+                .sink { hovering in
+                    guard hovering else { return }
                     Task { @MainActor in
                         await notch.expand()
                     }
                 }
 
-            // Collapse when the pointer leaves the whole panel.
+            // Collapse promptly when the pointer leaves the whole panel.
             collapseCancellable = notch.$isHovering
                 .removeDuplicates()
                 .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
