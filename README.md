@@ -15,6 +15,7 @@ Claude Code / Codex CLI의 남은 사용량과 세션 리셋 시간을 알려주
 
 <p align="center">
   <img src="docs/expanded.gif" width="330" alt="확장 화면 자세히 — 서비스별 카드, HP바, 리셋 카운트다운">
+  <img src="docs/stats.gif" width="330" alt="확장 뷰 2페이지 — 좌우 스와이프로 오늘/이번 주/일별 토큰 사용량 통계">
 </p>
 
 - 🦀 **노치 왼쪽 — Clawd**: Claude Code CLI에 실제 내장된 공식 스프라이트(쿼드런트 블록 아트,

@@ -15,6 +15,7 @@ live beside your MacBook notch, showing remaining usage and session reset times 
 
 <p align="center">
   <img src="docs/expanded.gif" width="330" alt="Expanded view up close — per-provider cards, HP bars, reset countdowns">
+  <img src="docs/stats.gif" width="330" alt="Expanded view page 2 — swipe sideways for today/this-week/daily token stats">
 </p>
 
 - 🦀 **Left of the notch — Clawd**: a 1:1 reproduction of the official sprite embedded in the

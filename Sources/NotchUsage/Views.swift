@@ -139,8 +139,10 @@ struct ExpandedView: View {
     private let claudeTint = ClawdSprite.bodyColor
     private let codexTint = Color(red: 0.47, green: 0.62, blue: 0.98)
 
-    /// NOTCH_DEMO_PAGE=1 opens on the stats page (for captures/testing).
-    @State private var page = Int(ProcessInfo.processInfo.environment["NOTCH_DEMO_PAGE"] ?? "") ?? 0
+    /// NOTCH_DEMO_PAGE=1 opens on the stats page; =cycle flips pages every
+    /// few seconds with the swipe animation (for README captures).
+    private static let demoPage = ProcessInfo.processInfo.environment["NOTCH_DEMO_PAGE"]
+    @State private var page = Int(demoPage ?? "") ?? 0
     @State private var pageDrag: CGFloat = 0
     private let pageWidth: CGFloat = 284
 
@@ -153,6 +155,12 @@ struct ExpandedView: View {
             }
             .padding(6)
             .frame(width: 296)
+        }
+        .onReceive(Timer.publish(every: 3.5, on: .main, in: .common).autoconnect()) { _ in
+            guard Self.demoPage == "cycle" else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                page = 1 - page
+            }
         }
     }
 
