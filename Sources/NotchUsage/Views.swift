@@ -48,6 +48,26 @@ enum UsageFormat {
     static func phrase(for mood: Mood) -> String {
         L10n.phrase(for: mood)
     }
+
+    /// 1234 → "1.2K", 45_600_000 → "46M" — compact token counts.
+    static func tokens(_ n: Int) -> String {
+        func short(_ value: Double, _ suffix: String) -> String {
+            let text = String(format: value < 10 ? "%.1f" : "%.0f", value)
+            return text.replacingOccurrences(of: ".0", with: "") + suffix
+        }
+        if n >= 1_000_000_000 { return short(Double(n) / 1e9, "B") }
+        if n >= 1_000_000 { return short(Double(n) / 1e6, "M") }
+        if n >= 1_000 { return short(Double(n) / 1e3, "K") }
+        return "\(n)"
+    }
+
+    /// Narrow weekday letter ("월" / "M") for the daily bar chart.
+    static func weekdayNarrow(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = L10n.dayTimeLocale
+        formatter.dateFormat = "EEEEE"
+        return formatter.string(from: date)
+    }
 }
 
 // MARK: - Display settings
@@ -119,35 +139,101 @@ struct ExpandedView: View {
     private let claudeTint = ClawdSprite.bodyColor
     private let codexTint = Color(red: 0.47, green: 0.62, blue: 0.98)
 
+    /// NOTCH_DEMO_PAGE=1 opens on the stats page (for captures/testing).
+    @State private var page = Int(ProcessInfo.processInfo.environment["NOTCH_DEMO_PAGE"] ?? "") ?? 0
+    @State private var pageDrag: CGFloat = 0
+    private let pageWidth: CGFloat = 284
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 8) {
                 header
-
-                if showClaude {
-                    providerCard(
-                        title: "Claude Code",
-                        tint: claudeTint,
-                        mood: claudeMood,
-                        error: model.errorMessage,
-                        character: { t in ClawdView(mood: claudeMood, t: t, scale: 1.4) },
-                        rows: claudeRows(now: context.date)
-                    )
-                }
-
-                if showCodex {
-                    providerCard(
-                        title: codexTitle,
-                        tint: codexTint,
-                        mood: codexMood,
-                        error: model.codexErrorMessage,
-                        character: { t in CodexPetView(mood: codexMood, t: t, scale: 1.4) },
-                        rows: codexRows(now: context.date)
-                    )
-                }
+                pager(now: context.date)
+                pageDots
             }
             .padding(6)
             .frame(width: 296)
+        }
+    }
+
+    // MARK: Pages (swipe between usage and token stats)
+
+    private func pager(now: Date) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            usagePage(now: now).frame(width: pageWidth)
+            statsPage(now: now).frame(width: pageWidth)
+        }
+        .offset(x: -CGFloat(page) * pageWidth + pageDrag)
+        .frame(width: pageWidth, alignment: .leading)
+        .clipped()
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { pageDrag = $0.translation.width }
+                .onEnded { value in
+                    let target: Int
+                    if value.translation.width < -40 { target = 1 }
+                    else if value.translation.width > 40 { target = 0 }
+                    else { target = page }
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                        page = target
+                        pageDrag = 0
+                    }
+                }
+        )
+    }
+
+    private var pageDots: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<2, id: \.self) { index in
+                Circle()
+                    .fill(.white.opacity(page == index ? 0.85 : 0.25))
+                    .frame(width: 5, height: 5)
+                    .contentShape(Circle().scale(2.5))
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                            page = index
+                        }
+                    }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func usagePage(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if showClaude {
+                providerCard(
+                    title: "Claude Code",
+                    tint: claudeTint,
+                    mood: claudeMood,
+                    error: model.errorMessage,
+                    character: { t in ClawdView(mood: claudeMood, t: t, scale: 1.4) },
+                    rows: claudeRows(now: now)
+                )
+            }
+
+            if showCodex {
+                providerCard(
+                    title: codexTitle,
+                    tint: codexTint,
+                    mood: codexMood,
+                    error: model.codexErrorMessage,
+                    character: { t in CodexPetView(mood: codexMood, t: t, scale: 1.4) },
+                    rows: codexRows(now: now)
+                )
+            }
+        }
+    }
+
+    private func statsPage(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if showClaude {
+                statsCard(title: "Claude Code", tint: claudeTint, daily: model.claudeDaily, now: now)
+            }
+            if showCodex {
+                statsCard(title: codexTitle, tint: codexTint, daily: model.codexDaily, now: now)
+            }
         }
     }
 
@@ -339,6 +425,110 @@ struct ExpandedView: View {
                 .stroke(tint.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3.5, 3]))
                 .padding(1.5)
         )
+    }
+
+    // MARK: Stats card (page 2)
+
+    private func statsCard(
+        title: String,
+        tint: Color,
+        daily: [String: DayTokens],
+        now: Date
+    ) -> some View {
+        let today = daily[LocalStats.dayKey(now)] ?? DayTokens()
+        let week = weekTokens(daily, now: now)
+        let days = lastDays(7, now: now)
+        let maxTotal = max(1, days.map { daily[LocalStats.dayKey($0)]?.total ?? 0 }.max() ?? 1)
+
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(L10n.statsTokensUsed)
+                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+
+            if daily.isEmpty {
+                Text(L10n.statsEmpty)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.5))
+            } else {
+                statLine(label: L10n.statsToday, tokens: today, tint: tint)
+                statLine(label: L10n.statsThisWeek, tokens: week, tint: tint)
+
+                HStack(alignment: .bottom, spacing: 5) {
+                    ForEach(days, id: \.self) { day in
+                        let count = daily[LocalStats.dayKey(day)]?.total ?? 0
+                        let isToday = Calendar.current.isDate(day, inSameDayAs: now)
+                        VStack(spacing: 2) {
+                            Text(count > 0 ? UsageFormat.tokens(count) : " ")
+                                .font(.system(size: 6, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.55))
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(tint.opacity(isToday ? 1 : 0.5))
+                                .frame(height: 4 + 24 * CGFloat(count) / CGFloat(maxTotal))
+                            Text(UsageFormat.weekdayNarrow(day))
+                                .font(.system(size: 6.5, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white.opacity(isToday ? 0.9 : 0.4))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(tint.opacity(0.13))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(tint.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3.5, 3]))
+                .padding(1.5)
+        )
+    }
+
+    private func statLine(label: String, tokens: DayTokens, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer()
+            Text("\(L10n.statsIn) \(UsageFormat.tokens(tokens.input + tokens.cacheRead + tokens.cacheWrite)) · \(L10n.statsOut) \(UsageFormat.tokens(tokens.output))")
+                .font(.system(size: 8, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.45))
+            Text(UsageFormat.tokens(tokens.total))
+                .font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.black.opacity(0.8))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1.5)
+                .background(Capsule().fill(tint))
+        }
+    }
+
+    private func weekTokens(_ daily: [String: DayTokens], now: Date) -> DayTokens {
+        let calendar = Calendar.current
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: now) else { return DayTokens() }
+        var sum = DayTokens()
+        var day = week.start
+        while day < week.end {
+            if let tokens = daily[LocalStats.dayKey(day)] { sum.add(tokens) }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return sum
+    }
+
+    private func lastDays(_ count: Int, now: Date) -> [Date] {
+        (0..<count).reversed().compactMap {
+            Calendar.current.date(byAdding: .day, value: -$0, to: now)
+        }
     }
 
     private func sparkle(t: TimeInterval, offset: Double) -> some View {

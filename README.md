@@ -88,6 +88,11 @@ UI 언어는 macOS 시스템 언어를 따라갑니다 (한국어 / 영어).
 - Claude는 5시간 세션/주간(전체·Opus·Sonnet), Codex는 요금제가 제공하는 창(세션/주간)을 표시
 - 캐릭터 말풍선: "아직 든든해요!" → "아껴 써야 해요…" → "거의 다 썼어요!!" → "쉬는 중… zzz"
 - 우측 상단 ⏻ 버튼 = 앱 종료
+- **좌우로 드래그하면(또는 하단 점 클릭) 2페이지 = 토큰 통계**: 서비스별로
+  오늘 / 이번 주 사용 토큰(입력·출력 구분)과 최근 7일 막대 그래프.
+  usage API는 %만 주기 때문에 절대량은 CLI의 로컬 기록에서 집계합니다
+  (`~/.claude/projects/**.jsonl`, `~/.codex/sessions/**`) — 기록이 로컬에
+  남아 있는 기간만 집계돼요 (Claude Code 기본 보관 30일)
 
 ## 4. 표시 토글
 
@@ -134,6 +139,7 @@ rm -rf dist ~/Library/Caches/NotchUsage
 - `Sources/NotchUsage/UsageModel.swift` — Claude 키체인/Codex auth.json 읽기, usage API 호출, 상태 모델
 - `Sources/NotchUsage/Characters.swift` — 공식 Clawd 스프라이트 렌더러 (+ Codex 폴백 로봇)
 - `Sources/NotchUsage/CodexPet.swift` — 공식 Codex 펫 스프라이트시트 로더/애니메이터
+- `Sources/NotchUsage/TokenStats.swift` — 로컬 CLI 기록에서 일별 토큰 사용량 집계
 - `Sources/NotchUsage/L10n.swift` — 시스템 언어 기반 한국어/영어 문자열
 - `Sources/NotchUsage/Views.swift` — 컴팩트/확장 SwiftUI 뷰, 표시 토글, HP바
 - `install.sh` — 릴리스 빌드 → .app 번들 생성 (+ `--autostart`로 LaunchAgent 등록)

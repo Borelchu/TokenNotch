@@ -91,6 +91,11 @@ The UI language follows your macOS system language (Korean / English).
 - Claude shows 5-hour session / weekly (all·Opus·Sonnet); Codex shows whatever windows your plan provides
 - Character speech bubbles: "Plenty left!" → "Getting low…" → "Almost out!!" → "Napping… zzz"
 - The ⏻ button at the top right quits the app
+- **Swipe sideways (or click the dots below) for page 2 = token stats**: per provider,
+  tokens used today / this week (input·output split) and a 7-day bar chart.
+  The usage API only exposes percentages, so absolute counts are aggregated from the
+  CLIs' local logs (`~/.claude/projects/**.jsonl`, `~/.codex/sessions/**`) — only for
+  as long as the logs are kept locally (Claude Code keeps 30 days by default)
 
 ## 4. Visibility toggles
 
@@ -156,6 +161,7 @@ rm -rf dist ~/Library/Caches/NotchUsage
 - `Sources/NotchUsage/UsageModel.swift` — Claude keychain / Codex auth.json reading, usage API calls, state model
 - `Sources/NotchUsage/Characters.swift` — official Clawd sprite renderer (+ Codex fallback robot)
 - `Sources/NotchUsage/CodexPet.swift` — official Codex pet spritesheet loader/animator
+- `Sources/NotchUsage/TokenStats.swift` — daily token totals aggregated from the CLIs' local logs
 - `Sources/NotchUsage/L10n.swift` — Korean/English strings, picked from the system language
 - `Sources/NotchUsage/Views.swift` — compact/expanded SwiftUI views, visibility toggles, HP bars
 - `install.sh` — release build → .app bundle (+ `--autostart` registers a LaunchAgent)

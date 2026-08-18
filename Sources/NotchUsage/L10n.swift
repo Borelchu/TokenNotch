@@ -54,6 +54,15 @@ enum L10n {
         }
     }
 
+    // MARK: Stats page
+
+    static var statsTokensUsed: String { isKorean ? "사용한 토큰" : "tokens used" }
+    static var statsToday: String { isKorean ? "오늘" : "Today" }
+    static var statsThisWeek: String { isKorean ? "이번 주" : "This week" }
+    static var statsIn: String { isKorean ? "입력" : "in" }
+    static var statsOut: String { isKorean ? "출력" : "out" }
+    static var statsEmpty: String { isKorean ? "로컬 기록이 없어요" : "No local logs yet" }
+
     // MARK: Controls
 
     static var quitHelp: String { isKorean ? "NotchUsage 종료" : "Quit NotchUsage" }

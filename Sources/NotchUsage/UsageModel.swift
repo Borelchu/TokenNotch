@@ -264,6 +264,10 @@ final class UsageModel: ObservableObject {
     @Published var codexPlan: String?
     @Published var codexErrorMessage: String?
 
+    /// Daily token totals aggregated from the CLIs' local logs (key: yyyy-MM-dd).
+    @Published var claudeDaily: [String: DayTokens] = [:]
+    @Published var codexDaily: [String: DayTokens] = [:]
+
     /// Once the usage endpoint's limiter trips it stays tripped for ~10 min,
     /// so retrying on the normal cadence just re-arms the penalty.
     private var claudeCooldownUntil: Date?
@@ -271,7 +275,14 @@ final class UsageModel: ObservableObject {
     func refresh() async {
         async let claude: Void = refreshClaude()
         async let codex: Void = refreshCodex()
-        _ = await (claude, codex)
+        async let stats: Void = refreshStats()
+        _ = await (claude, codex, stats)
+    }
+
+    private func refreshStats() async {
+        let result = await Task.detached(priority: .utility) { LocalStats.collect() }.value
+        claudeDaily = result.claude
+        codexDaily = result.codex
     }
 
     private func refreshClaude() async {
